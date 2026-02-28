@@ -1,0 +1,7 @@
+# Ignore everything except src/*.js and appsscript.json
+CLAUDE.md
+README.md
+node_modules/**
+.git/**
+.clasp.json
+.claspignore

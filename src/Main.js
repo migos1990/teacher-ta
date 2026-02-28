@@ -1,0 +1,124 @@
+/**
+ * Main.js — Entry point: processEmails()
+ * Orchestrates the full email processing pipeline.
+ */
+
+/**
+ * Main entry point. Called by time-based triggers 3x/day.
+ * Processes unread inbox emails: categorizes, drafts replies, applies labels.
+ */
+function processEmails() {
+  var startTime = Date.now();
+  var stats = { processed: 0, drafts: 0, excluded: 0, errors: 0 };
+
+  console.log('=== processEmails started at ' +
+    Utilities.formatDate(new Date(), getConfig('SCHOOL_TIMEZONE') || 'America/New_York', 'yyyy-MM-dd HH:mm:ss') +
+    ' ===');
+
+  try {
+    // Load context once for all emails
+    var context = buildContextString();
+    var roster = getStudentRoster();
+    var exclusions = getExclusionList();
+
+    // Search for unprocessed threads
+    var threads = searchUnprocessedThreads(BATCH_SIZE);
+    if (threads.length === 0) {
+      console.log('No unprocessed threads found. Exiting.');
+      return;
+    }
+
+    console.log('Processing ' + threads.length + ' threads...');
+
+    for (var i = 0; i < threads.length; i++) {
+      // Check time limit before each iteration
+      if (!isWithinTimeLimit(startTime, MAX_RUNTIME_MS)) {
+        console.log('Approaching time limit — stopping after ' + stats.processed + ' threads');
+        break;
+      }
+
+      var thread = threads[i];
+      try {
+        // Get the latest message in the thread
+        var messages = thread.getMessages();
+        var message = messages[messages.length - 1];
+        var senderEmail = extractSenderEmail(message);
+        var senderFrom = message.getFrom();
+
+        console.log('Processing: ' + message.getSubject() + ' from ' + senderFrom);
+
+        // Check exclusion list
+        if (isExcluded(senderEmail, exclusions)) {
+          console.log('Excluded sender: ' + senderEmail);
+          applyCategory(thread, 'EXCLUDED');
+          markAsProcessed(thread);
+          stats.excluded++;
+          stats.processed++;
+          continue;
+        }
+
+        // Look up student in roster
+        var studentInfo = lookupStudent(senderEmail, roster);
+        if (studentInfo) {
+          console.log('Matched student: ' + studentInfo['Student Name']);
+        }
+
+        // Get email body text
+        var emailBody = message.getPlainBody() || message.getBody();
+        // Truncate very long emails
+        if (emailBody.length > 5000) {
+          emailBody = emailBody.substring(0, 5000) + '\n\n[Email truncated]';
+        }
+
+        // Categorize the email
+        var categorization = categorizeEmail(emailBody, senderFrom, context);
+        console.log('Category: ' + categorization.category + ' | Summary: ' + categorization.summary);
+
+        // Skip drafting for excluded emails
+        if (categorization.category === 'EXCLUDED') {
+          applyCategory(thread, 'EXCLUDED');
+          markAsProcessed(thread);
+          stats.excluded++;
+          stats.processed++;
+          continue;
+        }
+
+        // Draft a reply
+        var replyText = draftReply(emailBody, senderFrom, studentInfo, context, categorization);
+        var replyHtml = formatHtmlReply(replyText);
+
+        // Create Gmail draft
+        var draft = createDraftReply(message, replyHtml);
+        if (draft) {
+          stats.drafts++;
+        }
+
+        // Apply category label and mark as processed
+        applyCategory(thread, categorization.category);
+        markAsProcessed(thread);
+        stats.processed++;
+
+      } catch (threadErr) {
+        logError('processEmails/thread ' + i, threadErr);
+        stats.errors++;
+        // Still mark as processed to avoid reprocessing broken emails
+        try {
+          markAsProcessed(thread);
+          stats.processed++;
+        } catch (labelErr) {
+          logError('processEmails/markFailed', labelErr);
+        }
+      }
+    }
+
+  } catch (e) {
+    logError('processEmails', e);
+    stats.errors++;
+  }
+
+  var elapsed = Math.round((Date.now() - startTime) / 1000);
+  console.log('=== processEmails complete ===');
+  console.log('Elapsed: ' + elapsed + 's | Processed: ' + stats.processed +
+    ' | Drafts: ' + stats.drafts + ' | Excluded: ' + stats.excluded +
+    ' | Errors: ' + stats.errors);
+}
