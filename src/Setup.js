@@ -1,23 +1,35 @@
 /**
  * Setup.js — One-time setup: properties, labels, triggers, roster sheet
  *
- * Run runFullSetup() from the Apps Script editor after first clasp push.
- * It will prompt for OAuth authorization on first run.
+ * Run runFullSetup() from the Apps Script editor (select it in the function
+ * dropdown and click Run). It will prompt for OAuth authorization on first run.
+ * No CLI tools required — everything runs in the browser.
  */
 
 /**
  * Store all configuration values in ScriptProperties.
- * Edit the values below before running, or pass them as an object.
+ *
+ * >>> BEFORE RUNNING: Replace the placeholder values below with your own <<<
+ *
+ *   ANTHROPIC_API_KEY  - Your Anthropic API key from console.anthropic.com
+ *   BRAIN_DOC_ID       - Google Doc ID of your "brain file" (the long string
+ *                        in the URL between /d/ and /edit)
+ *   DRIVE_FOLDER_ID    - (Optional) Google Drive folder ID with supplemental
+ *                        PDFs and Slides. Leave as '' to skip.
+ *   TEACHER_EMAIL      - The Gmail address the bot runs on
+ *   SCHOOL_TIMEZONE    - Your timezone (default: America/New_York)
+ *                        Full list: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+ *
  * @param {Object} [config] - Optional config overrides.
  */
 function setupScriptProperties(config) {
   var defaults = {
-    ANTHROPIC_API_KEY: 'YOUR_ANTHROPIC_API_KEY',
-    BRAIN_DOC_ID: 'YOUR_BRAIN_DOC_ID',
-    DRIVE_FOLDER_ID: '',
-    TEACHER_EMAIL: 'YOUR_EMAIL',
+    ANTHROPIC_API_KEY: 'YOUR_ANTHROPIC_API_KEY',   // <-- replace
+    BRAIN_DOC_ID: 'YOUR_BRAIN_DOC_ID',             // <-- replace
+    DRIVE_FOLDER_ID: '',                            // <-- optional
+    TEACHER_EMAIL: 'YOUR_EMAIL',                    // <-- replace
     CLAUDE_MODEL: CLAUDE_MODEL,
-    SCHOOL_TIMEZONE: 'America/New_York'
+    SCHOOL_TIMEZONE: 'America/New_York'             // <-- change if needed
   };
   var props = config || defaults;
   var scriptProps = PropertiesService.getScriptProperties();
@@ -117,7 +129,7 @@ function createTriggers() {
 
 /**
  * Run the complete setup sequence.
- * Call this from the Apps Script editor after first push.
+ * Call this from the Apps Script editor after pasting all code files.
  *
  * IMPORTANT: Before running, edit setupScriptProperties() above
  * with your actual Anthropic API key, Brain Doc ID, etc.
