@@ -17,6 +17,8 @@
  *   DRIVE_FOLDER_ID    - (Optional) Google Drive folder ID with supplemental
  *                        PDFs and Slides. Leave as '' to skip.
  *   TEACHER_EMAIL      - The Gmail address the bot runs on
+ *   TEACHER_NAME       - Your name, used as the email signature (e.g., "Louis Migault")
+ *   REPLY_LANGUAGE     - Language for replies (e.g., "French", "English"). Default: English
  *   SCHOOL_TIMEZONE    - Your timezone (default: America/New_York)
  *                        Full list: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
  *
@@ -28,6 +30,8 @@ function setupScriptProperties(config) {
     BRAIN_DOC_ID: 'YOUR_BRAIN_DOC_ID',             // <-- replace
     DRIVE_FOLDER_ID: '',                            // <-- optional
     TEACHER_EMAIL: 'YOUR_EMAIL',                    // <-- replace
+    TEACHER_NAME: 'YOUR_NAME',                      // <-- replace (used as email signature)
+    REPLY_LANGUAGE: 'English',                      // <-- change to 'French', etc.
     CLAUDE_MODEL: CLAUDE_MODEL,
     SCHOOL_TIMEZONE: 'America/New_York'             // <-- change if needed
   };

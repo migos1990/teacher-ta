@@ -43,7 +43,7 @@ Everything below happens in your web browser. No laptop software, no CLI tools, 
   "oauthScopes": [
     "https://mail.google.com/",
     "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/documents.readonly",
+    "https://www.googleapis.com/auth/documents",
     "https://www.googleapis.com/auth/drive",
     "https://www.googleapis.com/auth/presentations.readonly",
     "https://www.googleapis.com/auth/script.external_request",
@@ -83,6 +83,8 @@ You can delete the default `Code.gs` file that came with the project (click the 
    - `BRAIN_DOC_ID` — the Google Doc ID from your brain file's URL (the long string between `/d/` and `/edit`)
    - `DRIVE_FOLDER_ID` — (optional) ID of a Drive folder with supplemental PDFs/Slides
    - `TEACHER_EMAIL` — your Gmail address
+   - `TEACHER_NAME` — your name, used as the email signature (e.g., `Louis Migault`)
+   - `REPLY_LANGUAGE` — language for replies (e.g., `French`, `English`)
    - `SCHOOL_TIMEZONE` — your timezone (default: `America/New_York`)
 
 ### 5. Run setup
@@ -167,6 +169,8 @@ All secrets and IDs are stored in ScriptProperties (never hardcoded):
 | `DRIVE_FOLDER_ID` | (Optional) Drive folder with PDFs/Slides |
 | `ROSTER_SHEET_ID` | Auto-created by setup |
 | `TEACHER_EMAIL` | The Gmail account running the bot |
+| `TEACHER_NAME` | Your name (used as email signature) |
+| `REPLY_LANGUAGE` | Language for replies (e.g., "French", "English") |
 | `CLAUDE_MODEL` | Anthropic model to use |
 | `SCHOOL_TIMEZONE` | Timezone for triggers and date formatting |
 

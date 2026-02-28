@@ -104,12 +104,14 @@ function fetchWithRetry(url, options) {
  * @return {Object} Categorization result: {category, summary, suggestedTone}.
  */
 function categorizeEmail(emailBody, senderInfo, context) {
+  var replyLang = getConfig('REPLY_LANGUAGE') || 'English';
+
   var systemPrompt = 'You are an email categorization assistant for a teacher. ' +
     'Analyze the incoming email and categorize it.\n\n' +
     'Context about the teacher\'s class and policies:\n' + context + '\n\n' +
     'Respond with ONLY a valid JSON object (no markdown, no code fences) with these fields:\n' +
     '- "category": one of "URGENT", "ROUTINE", or "EXCLUDED"\n' +
-    '- "summary": a brief 1-2 sentence summary of the email\n' +
+    '- "summary": a brief 1-2 sentence summary of the email (write the summary in ' + replyLang + ')\n' +
     '- "suggestedTone": one of "formal", "warm", "empathetic", "direct"\n\n' +
     'URGENT: medical issues, safety concerns, immediate schedule conflicts, ' +
     'complaints, accommodation requests\n' +
@@ -157,12 +159,19 @@ function draftReply(emailBody, senderInfo, studentInfo, context, categorization)
       '- Notes: ' + (studentInfo['Notes'] || 'None');
   }
 
-  var teacherEmail = getConfig('TEACHER_EMAIL') || '';
+  var teacherName = getConfig('TEACHER_NAME') || '';
+  var replyLang = getConfig('REPLY_LANGUAGE') || 'English';
+
+  var signOffInstruction = teacherName
+    ? '- End with a sign-off followed by "' + teacherName + '" on the next line\n'
+    : '- Sign off naturally (e.g., "Best regards," or "Thank you,")\n';
 
   var systemPrompt = 'You are drafting an email reply on behalf of a teacher. ' +
+    'Write the ENTIRE reply in ' + replyLang + '. ' +
     'Write in the teacher\'s voice — professional, ' + categorization.suggestedTone + ', ' +
     'and helpful. The teacher will review and edit before sending.\n\n' +
     'Important guidelines:\n' +
+    '- Write everything in ' + replyLang + ', including the greeting and sign-off\n' +
     '- Reference relevant policies, FAQs, or information from the knowledge base when applicable\n' +
     '- Personalize the response using student info if available\n' +
     '- Keep the tone appropriate for the category (' + categorization.category + ')\n' +
@@ -170,8 +179,8 @@ function draftReply(emailBody, senderInfo, studentInfo, context, categorization)
     '- For ROUTINE emails, be helpful and concise\n' +
     '- Do NOT include a subject line — this is a reply\n' +
     '- Do NOT include email headers (To, From, etc.)\n' +
-    '- Sign off naturally (e.g., "Best regards," or "Thank you,")\n' +
-    '- Do NOT include the teacher\'s full email signature — the teacher will add it\n\n' +
+    signOffInstruction +
+    '- Do NOT include any additional email signature beyond the name\n\n' +
     'Teacher\'s knowledge base and class context:\n' + context +
     studentContext;
 
@@ -183,7 +192,11 @@ function draftReply(emailBody, senderInfo, studentInfo, context, categorization)
 
   var response = callClaude(systemPrompt, userMessage, 1024);
   if (!response) {
-    return 'Thank you for your email. I will review this and get back to you shortly.\n\nBest regards';
+    var fallback = replyLang.toLowerCase() === 'french'
+      ? 'Merci pour votre message. Je vais l\'examiner et vous répondre dans les meilleurs délais.\n\nCordialement'
+      : 'Thank you for your email. I will review this and get back to you shortly.\n\nBest regards';
+    if (teacherName) fallback += '\n' + teacherName;
+    return fallback;
   }
 
   return response;
