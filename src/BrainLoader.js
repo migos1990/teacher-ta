@@ -83,18 +83,19 @@ function loadDriveFolder() {
  * @return {string} Extracted text content.
  */
 function extractPDFText(fileId) {
+  // Try reading directly as a Google Doc first — works if Drive
+  // auto-converted the PDF to a Google Doc (common Drive setting)
   try {
-    var pdfFile = DriveApp.getFileById(fileId);
-    var blob = pdfFile.getBlob();
-    var contentType = blob.getContentType();
+    var text = DocumentApp.openById(fileId).getBody().getText();
+    console.log('Read file ' + fileId + ' directly as Google Doc (auto-converted PDF)');
+    return text;
+  } catch (directErr) {
+    // Not a Google Doc — fall through to OCR
+  }
 
-    // If Drive auto-converted this PDF to a Google Doc, read it directly
-    if (contentType !== 'application/pdf') {
-      console.log('File ' + fileId + ' has content type ' + contentType + ' — reading as Doc instead of OCR');
-      return DocumentApp.openById(fileId).getBody().getText();
-    }
-
-    // Use Drive API v2 to insert with OCR
+  // Real PDF: use Drive API v2 OCR to extract text
+  try {
+    var blob = DriveApp.getFileById(fileId).getBlob();
     var resource = {
       title: 'TEMP_OCR_' + new Date().getTime(),
       mimeType: MimeType.GOOGLE_DOCS
@@ -105,11 +106,9 @@ function extractPDFText(fileId) {
       convert: true
     });
 
-    // Read the text from the temporary doc
     var doc = DocumentApp.openById(tempDoc.id);
     var text = doc.getBody().getText();
 
-    // Trash the temporary doc
     DriveApp.getFileById(tempDoc.id).setTrashed(true);
 
     return text;
