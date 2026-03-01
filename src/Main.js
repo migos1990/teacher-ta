@@ -4,6 +4,37 @@
  */
 
 /**
+ * Build a brief conversation history from a thread's messages.
+ * Includes the last few messages (truncated) so Claude understands
+ * the conversation flow, not just the latest message.
+ * @param {GmailMessage[]} messages - All messages in the thread.
+ * @param {number} maxMessages - Max prior messages to include (default: 3).
+ * @return {string} Formatted conversation history, or empty string for single-message threads.
+ */
+function buildConversationHistory(messages, maxMessages) {
+  if (messages.length <= 1) return '';
+
+  var max = maxMessages || 3;
+  // Include messages before the last one (which is the email we're replying to)
+  var startIdx = Math.max(0, messages.length - 1 - max);
+  var endIdx = messages.length - 1;
+
+  var history = '\n\n--- Prior conversation context ---\n';
+  var maxPerMsg = Math.floor(2000 / Math.min(endIdx - startIdx, max));
+
+  for (var m = startIdx; m < endIdx; m++) {
+    var msg = messages[m];
+    var msgBody = msg.getPlainBody() || msg.getBody();
+    if (msgBody.length > maxPerMsg) {
+      msgBody = msgBody.substring(0, maxPerMsg) + ' [truncated]';
+    }
+    history += 'From ' + msg.getFrom() + ':\n' + msgBody + '\n---\n';
+  }
+
+  return history;
+}
+
+/**
  * Main entry point. Called by time-based triggers 3x/day.
  * Processes unread inbox emails: categorizes, drafts replies, applies labels.
  */
@@ -20,6 +51,7 @@ function processEmails() {
     var context = buildContextString();
     var roster = getStudentRoster();
     var exclusions = getExclusionList();
+    var vipContacts = getVIPContacts();
 
     // Search for unprocessed threads
     var threads = searchUnprocessedThreads(BATCH_SIZE);
@@ -57,26 +89,53 @@ function processEmails() {
           continue;
         }
 
-        // Look up student in roster
-        var studentInfo = lookupStudent(senderEmail, roster);
-        if (studentInfo) {
+        // Look up sender in VIP contacts and student roster
+        var vipInfo = lookupVIP(senderEmail, vipContacts);
+        var studentInfo = vipInfo ? null : lookupStudent(senderEmail, roster);
+        if (vipInfo) {
+          console.log('Matched VIP: ' + vipInfo['Name'] + ' (' + vipInfo['Role'] + ')');
+        } else if (studentInfo) {
           console.log('Matched student: ' + studentInfo['Student Name']);
         }
 
         // Get email body text
         var emailBody = message.getPlainBody() || message.getBody();
         // Truncate very long emails
-        if (emailBody.length > 5000) {
-          emailBody = emailBody.substring(0, 5000) + '\n\n[Email truncated]';
+        if (emailBody.length > 10000) {
+          emailBody = emailBody.substring(0, 10000) + '\n\n[Email truncated]';
+        }
+
+        // Note attachment presence so Claude is aware
+        var attachments = message.getAttachments();
+        if (attachments && attachments.length > 0) {
+          emailBody += '\n\n[Attachments: ' + attachments.map(function(a) {
+            return a.getName();
+          }).join(', ') + ']';
+        }
+
+        // Build conversation history for multi-message threads
+        var conversationHistory = buildConversationHistory(messages);
+        if (conversationHistory) {
+          emailBody = conversationHistory + '\n\nLatest message:\n' + emailBody;
         }
 
         // Categorize the email
         var categorization = categorizeEmail(emailBody, senderFrom, context);
-        console.log('Category: ' + categorization.category + ' | Summary: ' + categorization.summary);
+        console.log('Category: ' + categorization.category +
+          ' | Subcategory: ' + categorization.subcategory +
+          ' | Confidence: ' + categorization.confidence +
+          ' | Summary: ' + categorization.summary);
+
+        // VIP override: force URGENT + formal for high-priority contacts
+        if (vipInfo && String(vipInfo['Priority']).toUpperCase() === 'HIGH') {
+          categorization.category = 'URGENT';
+          categorization.suggestedTone = 'formal';
+          console.log('VIP override: forced URGENT/formal for ' + vipInfo['Name']);
+        }
 
         // Skip drafting for excluded emails
         if (categorization.category === 'EXCLUDED') {
-          applyCategory(thread, 'EXCLUDED');
+          applyCategory(thread, categorization);
           markAsProcessed(thread);
           stats.excluded++;
           stats.processed++;
@@ -84,7 +143,14 @@ function processEmails() {
         }
 
         // Draft a reply
-        var replyText = draftReply(emailBody, senderFrom, studentInfo, context, categorization);
+        var replyText = draftReply(emailBody, senderFrom, studentInfo, vipInfo, context, categorization);
+
+        // Prepend low-confidence warning for professor's attention
+        if (categorization.confidence < CONFIDENCE_THRESHOLD) {
+          replyText = '[LOW CONFIDENCE DRAFT — Please review carefully before sending. ' +
+            'Confidence: ' + categorization.confidence + ']\n\n' + replyText;
+        }
+
         var replyHtml = formatHtmlReply(replyText);
 
         // Create Gmail draft
@@ -93,8 +159,8 @@ function processEmails() {
           stats.drafts++;
         }
 
-        // Apply category label and mark as processed
-        applyCategory(thread, categorization.category);
+        // Apply category and subcategory labels, then mark as processed
+        applyCategory(thread, categorization);
         markAsProcessed(thread);
         stats.processed++;
 
