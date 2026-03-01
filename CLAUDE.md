@@ -1,9 +1,11 @@
 # Gmail Reply Bot — Google Apps Script
 
 ## What this project does
-A Gmail automation bot that reads incoming student/parent emails, uses the
-Anthropic Claude API to categorize them and draft context-aware replies, then
-creates Gmail drafts for teacher review. Runs 3x/day via time-based triggers.
+A Gmail automation bot for university professors that reads incoming student
+and colleague emails, uses the Anthropic Claude API to categorize them (with
+university-specific subcategories like grade appeals, extension requests,
+recommendation letters, etc.) and draft context-aware replies, then creates
+Gmail drafts for professor review. Runs 3x/day via time-based triggers.
 
 ## Tech stack
 - Google Apps Script (V8 runtime, JavaScript only — no TypeScript)
@@ -22,17 +24,20 @@ creates Gmail drafts for teacher review. Runs 3x/day via time-based triggers.
   pick up remaining emails
 
 ## File responsibilities
-- Config.js: LABEL_NAMES, SEARCH_QUERY constants, getConfig() wrapper
-- Main.js: processEmails() entry point, orchestrates the pipeline
+- Config.js: LABEL_NAMES (priority + subcategory labels), SEARCH_QUERY constants,
+  CONFIDENCE_THRESHOLD, getConfig() wrapper
+- Main.js: processEmails() entry point, orchestrates the pipeline,
+  buildConversationHistory() for thread context
 - GmailHelper.js: searchUnprocessedThreads(), createDraftReply(),
-  getOrCreateLabel(), markAsProcessed()
-- SheetHelper.js: getStudentRoster(), getExclusionList(), lookupStudent()
+  getOrCreateLabel(), markAsProcessed(), applyCategory() (supports subcategories)
+- SheetHelper.js: getStudentRoster(), getExclusionList(), lookupStudent(),
+  getVIPContacts(), lookupVIP()
 - BrainLoader.js: loadBrainDoc(), loadDriveFolder(), extractPDFText(),
   extractSlidesText(), buildContextString()
-- ClaudeAPI.js: callClaude(), categorizeEmail(), draftReply(),
-  fetchWithRetry()
+- ClaudeAPI.js: callClaude(), categorizeEmail() (returns subcategory + confidence),
+  draftReply() (subcategory-aware), getSubcategoryInstructions(), fetchWithRetry()
 - Setup.js: setupScriptProperties(), createLabels(), createTriggers(),
-  createRosterSheet(), runFullSetup()
+  createRosterSheet() (university columns + VIP Contacts tab), runFullSetup()
 - Utils.js: extractEmailAddress(), isWithinTimeLimit(), logError(), formatHtmlReply()
 
 ## Common commands

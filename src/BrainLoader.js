@@ -2,7 +2,7 @@
  * BrainLoader.js — Google Doc, PDF, Slides text extraction
  */
 
-var MAX_CONTEXT_CHARS = 15000;
+var MAX_CONTEXT_CHARS = 25000;
 
 /**
  * Retrieve cached text for a Drive file.
@@ -252,7 +252,7 @@ function buildContextString() {
 
   var brainText = loadBrainDoc();
   if (brainText) {
-    parts.push('=== TEACHER KNOWLEDGE BASE ===\n' + brainText);
+    parts.push('=== PROFESSOR KNOWLEDGE BASE ===\n' + brainText);
   }
 
   var folderText = loadDriveFolder();

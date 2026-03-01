@@ -80,7 +80,6 @@ function getExclusionList() {
 
 /**
  * Find a student record matching the sender email.
- * Checks both Student Email and Parent Email columns.
  * @param {string} email - The sender's email address.
  * @param {Object[]} roster - The student roster array.
  * @return {Object|null} The matching student record, or null.
@@ -91,9 +90,66 @@ function lookupStudent(email, roster) {
   var lowerEmail = email.toLowerCase().trim();
   for (var i = 0; i < roster.length; i++) {
     var studentEmail = String(roster[i]['Student Email'] || '').toLowerCase().trim();
-    var parentEmail = String(roster[i]['Parent Email'] || '').toLowerCase().trim();
-    if (studentEmail === lowerEmail || parentEmail === lowerEmail) {
+    if (studentEmail === lowerEmail) {
       return roster[i];
+    }
+  }
+  return null;
+}
+
+/**
+ * Read the VIP Contacts tab and return an array of contact objects.
+ * @return {Object[]} Array of VIP contact records.
+ */
+function getVIPContacts() {
+  var sheetId = getConfig('ROSTER_SHEET_ID');
+  if (!sheetId) return [];
+
+  try {
+    var ss = SpreadsheetApp.openById(sheetId);
+    var sheet = ss.getSheetByName('VIP Contacts');
+    if (!sheet) {
+      console.log('VIP Contacts tab not found — skipping');
+      return [];
+    }
+
+    var data = sheet.getDataRange().getValues();
+    if (data.length < 2) return [];
+
+    var headers = data[0];
+    var contacts = [];
+    for (var i = 1; i < data.length; i++) {
+      var row = data[i];
+      if (!row[0] && !row[1]) continue;
+      var record = {};
+      headers.forEach(function(header, idx) {
+        record[header] = row[idx] || '';
+      });
+      contacts.push(record);
+    }
+
+    console.log('Loaded ' + contacts.length + ' VIP contacts');
+    return contacts;
+  } catch (e) {
+    logError('getVIPContacts', e);
+    return [];
+  }
+}
+
+/**
+ * Find a VIP contact matching the sender email.
+ * @param {string} email - The sender's email address.
+ * @param {Object[]} contacts - The VIP contacts array.
+ * @return {Object|null} The matching contact record, or null.
+ */
+function lookupVIP(email, contacts) {
+  if (!email || !contacts || contacts.length === 0) return null;
+
+  var lowerEmail = email.toLowerCase().trim();
+  for (var i = 0; i < contacts.length; i++) {
+    var contactEmail = String(contacts[i]['Email'] || '').toLowerCase().trim();
+    if (contactEmail === lowerEmail) {
+      return contacts[i];
     }
   }
   return null;

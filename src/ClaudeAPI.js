@@ -98,45 +98,85 @@ function fetchWithRetry(url, options) {
 
 /**
  * Categorize an email using Claude.
+ * Returns priority tier, subcategory, summary, tone, and confidence.
  * @param {string} emailBody - The email body text.
  * @param {string} senderInfo - The sender's name/email.
  * @param {string} context - The brain file context.
- * @return {Object} Categorization result: {category, summary, suggestedTone}.
+ * @return {Object} Categorization result with category, subcategory, summary, suggestedTone, confidence.
  */
 function categorizeEmail(emailBody, senderInfo, context) {
   var replyLang = getConfig('REPLY_LANGUAGE') || 'English';
 
-  var systemPrompt = 'You are an email categorization assistant for a teacher. ' +
+  var systemPrompt = 'You are an email categorization assistant for a university professor. ' +
     'Analyze the incoming email and categorize it.\n\n' +
-    'Context about the teacher\'s class and policies:\n' + context + '\n\n' +
+    'Context about the professor\'s course and policies:\n' + context + '\n\n' +
     'Respond with ONLY a valid JSON object (no markdown, no code fences) with these fields:\n' +
     '- "category": one of "URGENT", "ROUTINE", or "EXCLUDED"\n' +
+    '- "subcategory": one of "GRADE_APPEAL", "EXTENSION_REQUEST", "REC_LETTER", ' +
+    '"RESEARCH_INQUIRY", "OFFICE_HOURS", "ACADEMIC_INTEGRITY", "ADVISING", ' +
+    '"COURSE_LOGISTICS", "ADMINISTRATIVE", "OTHER"\n' +
     '- "summary": a brief 1-2 sentence summary of the email (write the summary in ' + replyLang + ')\n' +
-    '- "suggestedTone": one of "formal", "warm", "empathetic", "direct"\n\n' +
-    'URGENT: medical issues, safety concerns, immediate schedule conflicts, ' +
-    'complaints, accommodation requests\n' +
-    'ROUTINE: general questions, homework inquiries, supply lists, ' +
-    'event details, progress updates\n' +
+    '- "suggestedTone": one of "formal", "warm", "empathetic", "direct"\n' +
+    '- "confidence": a number from 0.0 to 1.0 indicating how confident you are in the categorization\n\n' +
+    'URGENT: grade appeals, academic integrity issues, accommodation requests, ' +
+    'emails from administration or department leadership, safety or wellness concerns, complaints\n' +
+    'ROUTINE: extension requests, office hours questions, recommendation letter requests, ' +
+    'advising questions, course logistics, homework questions, research inquiries, progress updates\n' +
     'EXCLUDED: marketing, newsletters, automated notifications, spam';
 
   var userMessage = 'From: ' + senderInfo + '\n\nEmail body:\n' + emailBody;
 
-  var response = callClaude(systemPrompt, userMessage, 256);
+  var response = callClaude(systemPrompt, userMessage, 300);
   if (!response) {
-    return { category: 'ROUTINE', summary: 'Unable to categorize', suggestedTone: 'warm' };
+    return { category: 'ROUTINE', subcategory: 'OTHER', summary: 'Unable to categorize', suggestedTone: 'warm', confidence: 0.0 };
   }
 
   try {
     var parsed = JSON.parse(response);
     return {
       category: parsed.category || 'ROUTINE',
+      subcategory: parsed.subcategory || 'OTHER',
       summary: parsed.summary || '',
-      suggestedTone: parsed.suggestedTone || 'warm'
+      suggestedTone: parsed.suggestedTone || 'warm',
+      confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.5
     };
   } catch (e) {
     logError('categorizeEmail parse', e);
-    return { category: 'ROUTINE', summary: response.substring(0, 100), suggestedTone: 'warm' };
+    return { category: 'ROUTINE', subcategory: 'OTHER', summary: response.substring(0, 100), suggestedTone: 'warm', confidence: 0.0 };
   }
+}
+
+/**
+ * Get subcategory-specific drafting instructions for university email types.
+ * @param {string} subcategory - The email subcategory.
+ * @return {string} Instructions for Claude, or empty string.
+ */
+function getSubcategoryInstructions(subcategory) {
+  var instructions = {
+    'GRADE_APPEAL': 'This is a grade appeal. Acknowledge the student\'s concern seriously. ' +
+      'Explain the general appeals process or offer to review the work together during office hours. ' +
+      'Do NOT commit to changing any grade in this email.',
+    'EXTENSION_REQUEST': 'This is a deadline extension request. Be empathetic about their situation. ' +
+      'Reference the course late policy from the knowledge base if available. ' +
+      'If granting, state the new deadline clearly. If deferring, explain the process.',
+    'REC_LETTER': 'This is a recommendation letter request. Ask for: the deadline, ' +
+      'the program or position they are applying to, and any supporting materials they can share ' +
+      '(resume, statement of purpose, transcript). Confirm or politely decline availability.',
+    'ACADEMIC_INTEGRITY': 'THIS IS A SENSITIVE TOPIC. Do NOT discuss specific allegations, ' +
+      'evidence, or outcomes in email. Ask the student to schedule an in-person or video meeting. ' +
+      'Reference the university academic integrity policy in general terms only.',
+    'RESEARCH_INQUIRY': 'This is a research opportunity inquiry. Be encouraging but realistic ' +
+      'about current availability. Ask about their background, interests, and relevant coursework.',
+    'OFFICE_HOURS': 'Reference the professor\'s current office hours schedule from the knowledge base. ' +
+      'If the student needs a different time, suggest they email to arrange an appointment.',
+    'ADVISING': 'This is an academic advising question. Be helpful and reference academic policies ' +
+      'or degree requirements if known from the knowledge base. For complex advising matters, ' +
+      'suggest scheduling a meeting.',
+    'COURSE_LOGISTICS': 'This is about course logistics (schedule, materials, assignments). ' +
+      'Be clear and concise. Reference the syllabus or knowledge base for factual answers.',
+    'ADMINISTRATIVE': 'This is an administrative matter. Respond professionally and formally.'
+  };
+  return instructions[subcategory] || '';
 }
 
 /**
@@ -144,20 +184,38 @@ function categorizeEmail(emailBody, senderInfo, context) {
  * @param {string} emailBody - The original email body.
  * @param {string} senderInfo - The sender's name/email.
  * @param {Object|null} studentInfo - Student record from roster (or null).
+ * @param {Object|null} vipInfo - VIP contact record (or null).
  * @param {string} context - The brain file context.
  * @param {Object} categorization - Result from categorizeEmail().
  * @return {string} The draft reply text.
  */
-function draftReply(emailBody, senderInfo, studentInfo, context, categorization) {
-  var studentContext = '';
-  if (studentInfo) {
-    studentContext = '\n\nStudent information from roster:\n' +
+function draftReply(emailBody, senderInfo, studentInfo, vipInfo, context, categorization) {
+  var senderContext = '';
+  if (vipInfo) {
+    senderContext = '\n\nSender is a colleague/administrator:\n' +
+      '- Name: ' + (vipInfo['Name'] || 'Unknown') + '\n' +
+      '- Role: ' + (vipInfo['Role'] || 'N/A') + '\n' +
+      '- Notes: ' + (vipInfo['Notes'] || 'None') + '\n' +
+      'Use a collegial, professional tone. Do not use a student-facing tone.';
+  } else if (studentInfo) {
+    senderContext = '\n\nStudent information from roster:\n' +
       '- Name: ' + (studentInfo['Student Name'] || 'Unknown') + '\n' +
-      '- Grade: ' + (studentInfo['Grade'] || 'N/A') + '\n' +
-      '- Section: ' + (studentInfo['Section'] || 'N/A') + '\n' +
+      '- Year: ' + (studentInfo['Year'] || 'N/A') + '\n' +
+      '- Major: ' + (studentInfo['Major'] || 'N/A') + '\n' +
+      '- Student ID: ' + (studentInfo['Student ID'] || 'N/A') + '\n' +
+      '- Advisor: ' + (studentInfo['Advisor'] || 'N/A') + '\n' +
       '- Status: ' + (studentInfo['Status'] || 'Active') + '\n' +
+      '- Accommodation Notes: ' + (studentInfo['Accommodation Notes'] || 'None') + '\n' +
       '- Notes: ' + (studentInfo['Notes'] || 'None');
+  } else {
+    senderContext = '\n\nSender is not in any roster (unknown sender). ' +
+      'Be professional and helpful. Do not share specific student information.';
   }
+
+  var subcatInstructions = getSubcategoryInstructions(categorization.subcategory);
+  var subcatBlock = subcatInstructions
+    ? '\n\nSpecific guidance for this email type (' + categorization.subcategory + '):\n' + subcatInstructions
+    : '';
 
   var teacherName = getConfig('TEACHER_NAME') || '';
   var replyLang = getConfig('REPLY_LANGUAGE') || 'English';
@@ -166,14 +224,14 @@ function draftReply(emailBody, senderInfo, studentInfo, context, categorization)
     ? '- End with a sign-off followed by "' + teacherName + '" on the next line\n'
     : '- Sign off naturally (e.g., "Best regards," or "Thank you,")\n';
 
-  var systemPrompt = 'You are drafting an email reply on behalf of a teacher. ' +
+  var systemPrompt = 'You are drafting an email reply on behalf of a university professor. ' +
     'Write the ENTIRE reply in ' + replyLang + '. ' +
-    'Write in the teacher\'s voice — professional, ' + categorization.suggestedTone + ', ' +
-    'and helpful. The teacher will review and edit before sending.\n\n' +
+    'Write in the professor\'s voice — professional, ' + categorization.suggestedTone + ', ' +
+    'and helpful. The professor will review and edit before sending.\n\n' +
     'Important guidelines:\n' +
     '- Write everything in ' + replyLang + ', including the greeting and sign-off\n' +
     '- Reference relevant policies, FAQs, or information from the knowledge base when applicable\n' +
-    '- Personalize the response using student info if available\n' +
+    '- Personalize the response using student or sender info if available\n' +
     '- Keep the tone appropriate for the category (' + categorization.category + ')\n' +
     '- For URGENT emails, acknowledge the urgency and provide clear next steps\n' +
     '- For ROUTINE emails, be helpful and concise\n' +
@@ -181,12 +239,14 @@ function draftReply(emailBody, senderInfo, studentInfo, context, categorization)
     '- Do NOT include email headers (To, From, etc.)\n' +
     signOffInstruction +
     '- Do NOT include any additional email signature beyond the name\n\n' +
-    'Teacher\'s knowledge base and class context:\n' + context +
-    studentContext;
+    'Professor\'s knowledge base and course context:\n' + context +
+    senderContext +
+    subcatBlock;
 
   var userMessage = 'Please draft a reply to this email.\n\n' +
     'From: ' + senderInfo + '\n' +
     'Category: ' + categorization.category + '\n' +
+    'Subcategory: ' + (categorization.subcategory || 'OTHER') + '\n' +
     'Summary: ' + categorization.summary + '\n\n' +
     'Original email:\n' + emailBody;
 

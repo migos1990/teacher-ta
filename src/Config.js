@@ -7,8 +7,18 @@ var LABEL_NAMES = {
   NEEDS_REVIEW: 'AutoReply/NeedsReview',
   URGENT: 'AutoReply/Urgent',
   ROUTINE: 'AutoReply/Routine',
-  EXCLUDED: 'AutoReply/Excluded'
+  EXCLUDED: 'AutoReply/Excluded',
+  GRADE_APPEAL: 'AutoReply/GradeAppeal',
+  EXTENSION_REQUEST: 'AutoReply/ExtensionRequest',
+  REC_LETTER: 'AutoReply/RecLetter',
+  RESEARCH_INQUIRY: 'AutoReply/Research',
+  OFFICE_HOURS: 'AutoReply/OfficeHours',
+  ACADEMIC_INTEGRITY: 'AutoReply/AcademicIntegrity',
+  ADVISING: 'AutoReply/Advising',
+  ADMINISTRATIVE: 'AutoReply/Administrative'
 };
+
+var CONFIDENCE_THRESHOLD = 0.7;
 
 var SEARCH_QUERY = 'label:inbox -label:AutoReply/Processed newer_than:1d';
 

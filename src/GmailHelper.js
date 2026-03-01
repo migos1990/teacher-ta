@@ -66,28 +66,29 @@ function markAsProcessed(thread) {
 }
 
 /**
- * Apply a category label (Urgent, Routine, or Excluded) to a thread.
+ * Apply category labels to a thread.
+ * Accepts either a string (backward compat) or a categorization object
+ * with category and subcategory fields.
  * @param {GmailThread} thread - The thread to label.
- * @param {string} category - One of "URGENT", "ROUTINE", or "EXCLUDED".
+ * @param {string|Object} categorization - Category string or {category, subcategory} object.
  */
-function applyCategory(thread, category) {
+function applyCategory(thread, categorization) {
   try {
-    var labelName;
-    switch (category.toUpperCase()) {
-      case 'URGENT':
-        labelName = LABEL_NAMES.URGENT;
-        break;
-      case 'ROUTINE':
-        labelName = LABEL_NAMES.ROUTINE;
-        break;
-      case 'EXCLUDED':
-        labelName = LABEL_NAMES.EXCLUDED;
-        break;
-      default:
-        labelName = LABEL_NAMES.NEEDS_REVIEW;
+    // Backward compat: accept a plain string
+    if (typeof categorization === 'string') {
+      categorization = { category: categorization };
     }
-    var label = getOrCreateLabel(labelName);
-    thread.addLabel(label);
+
+    // Apply priority label
+    var priorityName = LABEL_NAMES[categorization.category] || LABEL_NAMES.NEEDS_REVIEW;
+    var priorityLabel = getOrCreateLabel(priorityName);
+    thread.addLabel(priorityLabel);
+
+    // Apply subcategory label if present and known
+    if (categorization.subcategory && LABEL_NAMES[categorization.subcategory]) {
+      var subLabel = getOrCreateLabel(LABEL_NAMES[categorization.subcategory]);
+      thread.addLabel(subLabel);
+    }
   } catch (e) {
     logError('applyCategory', e);
   }

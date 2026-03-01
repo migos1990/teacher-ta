@@ -51,13 +51,9 @@ function setupScriptProperties(config) {
  * Uses getOrCreateLabel from GmailHelper.js.
  */
 function createLabels() {
-  var labelNames = [
-    LABEL_NAMES.PROCESSED,
-    LABEL_NAMES.NEEDS_REVIEW,
-    LABEL_NAMES.URGENT,
-    LABEL_NAMES.ROUTINE,
-    LABEL_NAMES.EXCLUDED
-  ];
+  var labelNames = Object.keys(LABEL_NAMES).map(function(key) {
+    return LABEL_NAMES[key];
+  });
   labelNames.forEach(function(name) {
     getOrCreateLabel(name);
     console.log('Label ready: ' + name);
@@ -77,11 +73,17 @@ function createRosterSheet() {
   var rosterSheet = ss.getSheets()[0];
   rosterSheet.setName('Student Roster');
   rosterSheet.appendRow([
-    'Student Name', 'Student Email', 'Parent Email',
-    'Grade', 'Section', 'Status', 'Notes'
+    'Student Name', 'Student Email', 'Year', 'Major',
+    'Student ID', 'Advisor', 'Status', 'Accommodation Notes', 'Notes'
   ]);
   rosterSheet.getRange('1:1').setFontWeight('bold');
   rosterSheet.setFrozenRows(1);
+
+  // Set up VIP Contacts tab
+  var vipSheet = ss.insertSheet('VIP Contacts');
+  vipSheet.appendRow(['Name', 'Email', 'Role', 'Priority', 'Notes']);
+  vipSheet.getRange('1:1').setFontWeight('bold');
+  vipSheet.setFrozenRows(1);
 
   // Set up Exclusions tab
   var exclusionSheet = ss.insertSheet('Exclusions');
