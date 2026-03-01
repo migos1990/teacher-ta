@@ -93,17 +93,32 @@ function extractPDFText(fileId) {
     // Not a Google Doc — fall through to OCR
   }
 
-  // Real PDF: use Drive API v2 OCR to extract text
+  // Real PDF: download raw bytes via Drive API to avoid auto-conversion
+  // issues where getBlob() returns content Drive misdetects as a Google Doc
   try {
-    var blob = DriveApp.getFileById(fileId).getBlob();
+    var fileMeta = Drive.Files.get(fileId);
+    var downloadUrl = fileMeta.downloadUrl;
+
+    if (!downloadUrl) {
+      console.log('No download URL for file ' + fileId + ' — skipping');
+      return '';
+    }
+
+    var response = UrlFetchApp.fetch(downloadUrl, {
+      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+      muteHttpExceptions: true
+    });
+    var blob = response.getBlob();
+    blob.setName('temp_ocr.pdf');
+    blob.setContentType('application/pdf');
+
     var resource = {
       title: 'TEMP_OCR_' + new Date().getTime(),
       mimeType: MimeType.GOOGLE_DOCS
     };
 
     var tempDoc = Drive.Files.insert(resource, blob, {
-      ocr: true,
-      convert: true
+      ocr: true
     });
 
     var doc = DocumentApp.openById(tempDoc.id);
