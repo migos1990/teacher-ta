@@ -121,11 +121,12 @@ function extractPDFText(fileId) {
 
     var resource = {
       title: 'TEMP_OCR_' + new Date().getTime(),
-      mimeType: MimeType.GOOGLE_DOCS
+      mimeType: 'application/pdf'
     };
 
     var tempDoc = Drive.Files.insert(resource, blob, {
-      ocr: true
+      ocr: true,
+      convert: true
     });
 
     var doc = DocumentApp.openById(tempDoc.id);
