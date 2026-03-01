@@ -77,28 +77,35 @@ function loadDriveFolder() {
 }
 
 /**
- * Extract text from a PDF using Drive API v2 OCR conversion.
- * Creates a temporary Google Doc, reads text, then trashes the temp doc.
+ * Extract text from a PDF file. Checks the Drive API v2 actual MIME type
+ * first — if Drive auto-converted the PDF to a Google Doc, exports as
+ * plain text directly. Only uses OCR for genuine PDF files.
  * @param {string} fileId - The Drive file ID of the PDF.
  * @return {string} Extracted text content.
  */
 function extractPDFText(fileId) {
-  // Try reading directly as a Google Doc first — works if Drive
-  // auto-converted the PDF to a Google Doc (common Drive setting)
-  try {
-    var text = DocumentApp.openById(fileId).getBody().getText();
-    console.log('Read file ' + fileId + ' directly as Google Doc (auto-converted PDF)');
-    return text;
-  } catch (directErr) {
-    // Not a Google Doc — fall through to OCR
-  }
-
-  // Real PDF: download raw bytes via Drive API to avoid auto-conversion
-  // issues where getBlob() returns content Drive misdetects as a Google Doc
   try {
     var fileMeta = Drive.Files.get(fileId);
-    var downloadUrl = fileMeta.downloadUrl;
+    var actualMimeType = fileMeta.mimeType;
+    console.log('extractPDFText: file ' + fileId + ' — DriveApp says PDF, Drive API says: ' + actualMimeType);
 
+    // If Drive auto-converted this PDF to a Google Doc, the Drive API
+    // reports the true type. Export as plain text — no OCR needed.
+    if (actualMimeType === 'application/vnd.google-apps.document') {
+      console.log('File is auto-converted Google Doc — exporting as plain text');
+      var exportLinks = fileMeta.exportLinks;
+      if (exportLinks && exportLinks['text/plain']) {
+        var response = UrlFetchApp.fetch(exportLinks['text/plain'], {
+          headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }
+        });
+        return response.getContentText();
+      }
+      // Fallback: read via DocumentApp
+      return DocumentApp.openById(fileId).getBody().getText();
+    }
+
+    // Genuine PDF: download raw bytes and OCR
+    var downloadUrl = fileMeta.downloadUrl;
     if (!downloadUrl) {
       console.log('No download URL for file ' + fileId + ' — skipping');
       return '';
