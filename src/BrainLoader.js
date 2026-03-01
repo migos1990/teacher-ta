@@ -86,6 +86,13 @@ function extractPDFText(fileId) {
   try {
     var pdfFile = DriveApp.getFileById(fileId);
     var blob = pdfFile.getBlob();
+    var contentType = blob.getContentType();
+
+    // If Drive auto-converted this PDF to a Google Doc, read it directly
+    if (contentType !== 'application/pdf') {
+      console.log('File ' + fileId + ' has content type ' + contentType + ' — reading as Doc instead of OCR');
+      return DocumentApp.openById(fileId).getBody().getText();
+    }
 
     // Use Drive API v2 to insert with OCR
     var resource = {
