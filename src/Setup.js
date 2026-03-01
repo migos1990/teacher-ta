@@ -132,6 +132,24 @@ function createTriggers() {
 }
 
 /**
+ * Clear all cached file text from ScriptProperties.
+ * Run this if you need to force re-extraction of Drive folder files
+ * (e.g., after replacing a PDF with updated content).
+ */
+function clearFileCache() {
+  var props = PropertiesService.getScriptProperties();
+  var all = props.getProperties();
+  var count = 0;
+  Object.keys(all).forEach(function(key) {
+    if (key.indexOf('_CACHE_') === 0) {
+      props.deleteProperty(key);
+      count++;
+    }
+  });
+  console.log('Cleared ' + count + ' cached file entries.');
+}
+
+/**
  * Run the complete setup sequence.
  * Call this from the Apps Script editor after pasting all code files.
  *

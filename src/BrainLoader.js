@@ -5,6 +5,35 @@
 var MAX_CONTEXT_CHARS = 15000;
 
 /**
+ * Retrieve cached text for a Drive file.
+ * @param {string} fileId - The Drive file ID.
+ * @param {number} lastUpdated - The file's last-modified timestamp (ms).
+ * @return {string|null} Cached text, or null if not cached / stale.
+ */
+function getCachedFileText(fileId, lastUpdated) {
+  var raw = PropertiesService.getScriptProperties().getProperty('_CACHE_' + fileId);
+  if (!raw) return null;
+  try {
+    var entry = JSON.parse(raw);
+    if (entry.ts === lastUpdated) return entry.text;
+  } catch (e) {
+    // Corrupted cache entry — treat as miss
+  }
+  return null;
+}
+
+/**
+ * Store extracted text for a Drive file in the cache.
+ * @param {string} fileId - The Drive file ID.
+ * @param {number} lastUpdated - The file's last-modified timestamp (ms).
+ * @param {string} text - The extracted text to cache.
+ */
+function setCachedFileText(fileId, lastUpdated, text) {
+  var value = JSON.stringify({ ts: lastUpdated, text: text });
+  PropertiesService.getScriptProperties().setProperty('_CACHE_' + fileId, value);
+}
+
+/**
  * Load the brain file Google Doc and return its full text.
  * @return {string} The document text content.
  */
@@ -46,23 +75,34 @@ function loadDriveFolder() {
       var file = files.next();
       var mimeType = file.getMimeType();
       var fileName = file.getName();
+      var fileId = file.getId();
+      var lastUpdated = file.getLastUpdated().getTime();
       var fileText = '';
 
       try {
-        if (mimeType === MimeType.GOOGLE_DOCS) {
-          fileText = DocumentApp.openById(file.getId()).getBody().getText();
+        // Check cache first — skip extraction if file hasn't changed
+        var cached = getCachedFileText(fileId, lastUpdated);
+        if (cached !== null) {
+          fileText = cached;
+          console.log('Cache hit: ' + fileName + ' (' + fileText.length + ' chars)');
+        } else if (mimeType === MimeType.GOOGLE_DOCS) {
+          fileText = DocumentApp.openById(fileId).getBody().getText();
         } else if (mimeType === MimeType.PDF) {
-          fileText = extractPDFText(file.getId());
+          fileText = extractPDFText(fileId);
         } else if (mimeType === MimeType.GOOGLE_SLIDES) {
-          fileText = extractSlidesText(file.getId());
+          fileText = extractSlidesText(fileId);
         } else {
           console.log('Skipping unsupported file type: ' + fileName + ' (' + mimeType + ')');
           continue;
         }
 
         if (fileText) {
+          // Cache the extracted text for future runs
+          if (cached === null) {
+            setCachedFileText(fileId, lastUpdated, fileText);
+            console.log('Cached text for: ' + fileName + ' (' + fileText.length + ' chars)');
+          }
           texts.push('--- ' + fileName + ' ---\n' + fileText);
-          console.log('Extracted text from: ' + fileName + ' (' + fileText.length + ' chars)');
         }
       } catch (fileErr) {
         logError('loadDriveFolder/' + fileName, fileErr);
@@ -136,7 +176,12 @@ function extractPDFText(fileId) {
 
     return text;
   } catch (e) {
-    logError('extractPDFText', e);
+    var msg = e.message || String(e);
+    if (msg.indexOf('rate limit') !== -1 || msg.indexOf('Rate Limit') !== -1) {
+      console.log('[AutoReply] OCR rate limited for file ' + fileId + ' — will retry next run');
+    } else {
+      logError('extractPDFText', e);
+    }
     return '';
   }
 }
